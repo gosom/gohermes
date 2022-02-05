@@ -1,0 +1,21 @@
+volumes:
+  postgres_data_todo:
+
+networks:
+  todo-network:
+
+services:
+  db:
+    image: postgres:13-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=demo
+    expose:
+      - "5432"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data_todo:/var/lib/postgresql/data
+    networks:
+      - todo-network
