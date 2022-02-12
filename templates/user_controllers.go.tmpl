@@ -1,0 +1,104 @@
+package user
+
+import (
+	"net/http"
+
+	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/utils"
+)
+
+func RegisterUserHandler(di *container.ServiceContainer) http.HandlerFunc {
+	srv := GetFromDi(di)
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload RegisterUserPayload
+		if err := utils.Bind(r.Body, &payload); err != nil {
+			apiErr := utils.NewBadRequestError(err.Error())
+			utils.RenderJson(r, w, http.StatusBadRequest, apiErr)
+			return
+		}
+		payload.Role = "member"
+		err := srv.Register(r.Context(), payload)
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		utils.RenderJson(r, w, http.StatusCreated, nil)
+	}
+}
+
+func GetUserHandler(di *container.ServiceContainer) http.HandlerFunc {
+	srv := GetFromDi(di)
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := utils.GetIntUrlParam(r, "id")
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		u, err := srv.GetUserByID(r.Context(), id)
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		utils.RenderJson(r, w, http.StatusOK, u)
+	}
+}
+
+func GenerateApiKey(di *container.ServiceContainer) http.HandlerFunc {
+	srv := GetFromDi(di)
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := utils.GetIntUrlParam(r, "id")
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		apiKey, err := srv.GenerateApiKey(r.Context(), id)
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		ans := GenerateApiKeyResponse{ApiKey: apiKey}
+		utils.RenderJson(r, w, http.StatusCreated, ans)
+	}
+}
+
+func GetApiKeys(di *container.ServiceContainer) http.HandlerFunc {
+	srv := GetFromDi(di)
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := utils.GetIntUrlParam(r, "id")
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		apiKeys, err := srv.GetApiKeys(r.Context(), id)
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		items := make([]ApiKeyResponse, len(apiKeys))
+		for i := range apiKeys {
+			items[i] = ApiKeyResponse{
+				ID:        apiKeys[i].ID,
+				CreatedAt: apiKeys[i].CreatedAt,
+			}
+		}
+		utils.RenderJson(r, w, http.StatusCreated, items)
+	}
+}
+
+func LoginUserHandler(di *container.ServiceContainer) http.HandlerFunc {
+	srv := GetFromDi(di)
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload LoginUserPayload
+		if err := utils.Bind(r.Body, &payload); err != nil {
+			apiErr := utils.NewBadRequestError(err.Error())
+			utils.RenderJson(r, w, http.StatusBadRequest, apiErr)
+			return
+		}
+		tok, err := srv.Login(r.Context(), payload)
+		if ae := utils.ApiErrorFromErr(err); ae != nil {
+			utils.RenderJson(r, w, ae.StatusCode, ae)
+			return
+		}
+		utils.RenderJson(r, w, http.StatusOK, tok)
+	}
+}

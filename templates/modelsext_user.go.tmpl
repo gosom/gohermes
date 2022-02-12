@@ -1,0 +1,25 @@
+package modelsext
+
+import "{{ .PackageName }}/models"
+
+type User struct {
+	*models.User
+}
+
+func (o User) GetID() int {
+	return o.ID
+}
+
+func (o User) GetRoles() []string {
+	if o.R == nil {
+		return nil
+	}
+	names := make([]string, 0, len(o.R.UserRoles))
+	for i := range o.R.UserRoles {
+		if o.R.UserRoles[i].R == nil || o.R.UserRoles[i].R.Role == nil {
+			return names
+		}
+		names = append(names, o.R.UserRoles[i].R.Role.Name)
+	}
+	return names
+}

@@ -1,0 +1,17 @@
+package user
+
+import "time"
+
+type GenerateApiKeyResponse struct {
+	ApiKey string `json:"apiKey"`
+}
+
+type ApiKeyResponse struct {
+	ID        int       `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type LoginResponse struct {
+	Access  string `json:"access"`
+	Refresh string `json:"refresh"`
+}

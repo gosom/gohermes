@@ -1,22 +1,21 @@
 package utils
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
-
-	"gorm.io/gorm"
 )
 
-func IsErrNotFound(err error, resource string, id uint) (bool, *ApiError) {
+func IsErrNotFound(err error, resource string, id int) *ApiError {
 	if err == nil {
-		return false, nil
+		return nil
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errors.Is(err, sql.ErrNoRows) {
 		ae := NewResourceNotFoundError(resource, id)
-		return true, &ae
+		return &ae
 	}
-	return false, nil
+	return nil
 }
 
 type ApiError struct {
@@ -28,7 +27,19 @@ func (o *ApiError) Error() string {
 	return fmt.Sprintf("%d: %s", o.StatusCode, o.Msg)
 }
 
-func NewResourceNotFoundError(resourceName string, id uint) ApiError {
+func ApiErrorFromErr(err error) *ApiError {
+	if err == nil {
+		return nil
+	}
+	ae, ok := err.(*ApiError)
+	if !ok {
+		o := NewInternalServerError(err.Error())
+		ae = &o
+	}
+	return ae
+}
+
+func NewResourceNotFoundError(resourceName string, id int) ApiError {
 	ae := ApiError{
 		StatusCode: http.StatusNotFound,
 		Msg:        fmt.Sprintf("not found %s with id %d", resourceName, id),
@@ -37,11 +48,17 @@ func NewResourceNotFoundError(resourceName string, id uint) ApiError {
 }
 
 func NewAuthenticationError(msg string) ApiError {
-	return ApiError{StatusCode: http.StatusForbidden, Msg: msg}
+	if len(msg) == 0 {
+		msg = http.StatusText(http.StatusUnauthorized)
+	}
+	return ApiError{StatusCode: http.StatusUnauthorized, Msg: msg}
 }
 
 func NewAuthorizationError(msg string) ApiError {
-	return ApiError{StatusCode: http.StatusUnauthorized, Msg: msg}
+	if len(msg) == 0 {
+		msg = http.StatusText(http.StatusForbidden)
+	}
+	return ApiError{StatusCode: http.StatusForbidden, Msg: msg}
 }
 
 func NewInternalServerError(msg string) ApiError {

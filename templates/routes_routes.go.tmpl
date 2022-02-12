@@ -1,0 +1,45 @@
+package routes
+
+import (
+	"github.com/go-chi/chi"
+	"github.com/gosom/gohermes/pkg/auth"
+	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/server"
+
+    "{{ .PackageName }}/user"
+)
+
+func SetUpRoutes(di *container.ServiceContainer, srv *server.Server) error {
+	e := auth.EnforcerFromDi(di)
+	e.AddPolicy("admin", "*", "*")
+
+	router := srv.GetRouter()
+
+	router.Get("/health", server.HealthHandler(di))
+
+	// public endpoints
+	router.Post("/register", user.RegisterUserHandler(di))
+	router.Post("/login", user.LoginUserHandler(di))
+
+	router.Route("/users", func(r chi.Router) {
+		// By default support api key and JWT
+		//r.Use(auth.AuthenticationXAPIKey(di))
+		r.Use(auth.AuthenticationJWT(di))
+		r.Use(auth.Authorization(di))
+
+		// Here to support only JWT
+		r.Group(func(r chi.Router) {
+			r.Use(auth.AuthenticationJWT(di))
+			r.Post(`/{id:\d+}/apikeys`, user.GenerateApiKey(di))
+			r.Get(`/{id:\d+}/apikeys`, user.GetApiKeys(di))
+		})
+		r.Get(`/{id:\d+}`, user.GetUserHandler(di))
+
+		//r.Delete(`/{id:\d+}/apikeys/{apiKeyId`, user.GenerateApiKey(di))
+		//r.Post(`/{user_id:\d+}/todo`, controllers.CreateTodo(di))
+		//r.Get(`/{user_id:\d+}/todo/{todo_id:\d+}`, controllers.GetTodoByID(di))
+		//r.Get(`/{user_id:\d+}/todo`, controllers.GetTodos(di))
+	})
+	return nil
+
+}

@@ -1,0 +1,222 @@
+package user
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/casbin/casbin/v2"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
+	"github.com/gosom/gohermes/pkg/auth"
+	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/utils"
+
+    "{{ .PackageName }}/models"
+	"{{ .PackageName }}/modelsext"
+)
+
+type UserService struct {
+	di       *container.ServiceContainer
+	enforcer *casbin.Enforcer
+}
+
+func GetFromDi(di *container.ServiceContainer) *UserService {
+	iface, err := di.GetService("users")
+	if err != nil {
+		panic(err)
+	}
+	srv := iface.(*UserService)
+	return srv
+}
+
+func NewUserService(di *container.ServiceContainer) *UserService {
+	ans := UserService{
+		di: di,
+	}
+	ans.enforcer = auth.EnforcerFromDi(di)
+	return &ans
+}
+
+func (o *UserService) Register(ctx context.Context, p RegisterUserPayload) (err error) {
+	err = utils.Validate.StructCtx(ctx, p)
+	if err != nil {
+		ae := utils.NewBadRequestError(err.Error())
+		err = &ae
+		return
+	}
+	err = utils.ValidatePassword(p.Password)
+	if err != nil {
+		ae := utils.NewBadRequestError(err.Error())
+		err = &ae
+		return
+	}
+	hash, err := utils.HashPassword(p.Password)
+	if err != nil {
+		return
+	}
+	var u models.User
+	u.Email = strings.ToLower(strings.TrimSpace(p.Email))
+	u.Password = hash
+	tx, err := o.di.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	exists, err := models.Users(models.UserWhere.Email.EQ(u.Email)).Exists(ctx, tx)
+	if err != nil {
+		return
+	}
+	if exists {
+		ae := utils.ApiError{
+			StatusCode: http.StatusConflict,
+			Msg:        "user with this email already exists",
+		}
+		err = &ae
+		return
+	}
+	role, err := models.Roles(models.RoleWhere.Name.EQ(p.Role)).One(ctx, o.di.DB)
+	if err != nil {
+		ae := utils.ApiError{
+			StatusCode: http.StatusBadRequest,
+			Msg:        "user role not exists",
+		}
+		err = &ae
+		return
+	}
+	err = u.Insert(ctx, o.di.DB, boil.Infer())
+	if err != nil {
+		return
+	}
+
+	userRole := models.UserRole{
+		UserID: u.ID,
+		RoleID: role.ID,
+	}
+
+	err = userRole.Insert(ctx, o.di.DB, boil.Infer())
+	if err != nil {
+		return
+	}
+	err = tx.Commit()
+	if err != nil {
+		return
+	}
+
+	obj := strconv.Itoa(u.ID)
+	rules := [][]string{
+		{obj, fmt.Sprintf("/users/%d", u.ID), "*"},
+		{obj, fmt.Sprintf("/users/%d/*", u.ID), "*"},
+	}
+	_, err = o.enforcer.AddPolicies(rules)
+	if err != nil {
+		return
+	}
+	_, err = o.enforcer.AddRolesForUser(obj, []string{p.Role})
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+func (o *UserService) GetUserByID(ctx context.Context, id int) (auth.IUser, error) {
+	u, err := models.Users(
+		qm.Load("UserRoles.Role"),
+		models.UserWhere.ID.EQ(id),
+	).One(ctx, o.di.DB)
+
+	if ae := utils.IsErrNotFound(err, "user", id); ae != nil {
+		return nil, ae
+	}
+	if err != nil {
+		return nil, err
+	}
+	ans := modelsext.User{
+		User: u,
+	}
+	return &ans, nil
+}
+
+func (o *UserService) GetUserFromApiKey(ctx context.Context, apiKey string) (auth.IUser, error) {
+	item, err := models.APIKeys(
+		qm.Load("User.UserRoles.Role"),
+		qm.Where("api_key = ?", utils.Sha256(apiKey)),
+	).One(ctx, o.di.DB)
+	if err != nil {
+		return nil, err
+	}
+	ans := modelsext.User{
+		User: item.R.User,
+	}
+	return &ans, nil
+}
+
+func (o *UserService) GenerateApiKey(ctx context.Context, userID int) (string, error) {
+	val := utils.XApiKey()
+	apiKey := models.APIKey{
+		APIKey: utils.Sha256(val),
+		UserID: userID,
+	}
+	return val, apiKey.Insert(ctx, o.di.DB, boil.Infer())
+}
+
+func (o *UserService) GetApiKeys(ctx context.Context, userID int) ([]*models.APIKey, error) {
+	apiKeys, err := models.APIKeys(qm.Where("user_id = ?", userID)).All(ctx, o.di.DB)
+	return apiKeys, err
+
+}
+
+func (o *UserService) Login(ctx context.Context, payload LoginUserPayload) (ans LoginResponse, err error) {
+	err = utils.Validate.StructCtx(ctx, payload)
+	if err != nil {
+		ae := utils.NewBadRequestError(err.Error())
+		err = &ae
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(payload.Email))
+	u, err := models.Users(qm.Where("email = ?", email)).One(ctx, o.di.DB)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		ae := utils.NewAuthenticationError("")
+		err = &ae
+		return
+
+	}
+	if err != nil {
+		ae := utils.NewInternalServerError(err.Error())
+		err = &ae
+		return
+	}
+	err = utils.CompareHashAndPassword(u.Password, payload.Password)
+	if err != nil {
+		ae := utils.NewAuthenticationError("")
+		err = &ae
+		return
+	}
+	mu := modelsext.User{u}
+	ans.Access, err = auth.CreateJwtAccessToken(
+		o.di.Cfg.TokenSecret, o.di.Cfg.TokenIssuer,
+		o.di.Cfg.AccessTokenDuration, mu,
+	)
+	if err != nil {
+		ae := utils.NewAuthenticationError("")
+		err = &ae
+		return
+	}
+	ans.Refresh, err = auth.CreateJwtRefreshToken(
+		o.di.Cfg.TokenSecret, o.di.Cfg.TokenIssuer,
+		ans.Access,
+		o.di.Cfg.RefreshTokenDuration,
+	)
+	if err != nil {
+		ae := utils.NewAuthenticationError("")
+		err = &ae
+		return
+	}
+
+	return
+}

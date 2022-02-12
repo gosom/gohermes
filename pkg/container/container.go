@@ -1,14 +1,14 @@
 package container
 
 import (
+	"database/sql"
 	"errors"
 	"sync"
 
+	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 
 	"github.com/gosom/gohermes/pkg/config"
 )
@@ -18,9 +18,10 @@ var ErrServiceNotFound = errors.New("service not found")
 type ServiceContainer struct {
 	Cfg      *config.Config
 	Logger   zerolog.Logger
-	DB       *gorm.DB
+	DB       *sql.DB
 	Lock     *sync.RWMutex
 	Services map[string]interface{}
+	Payloads map[string]interface{}
 }
 
 func (o *ServiceContainer) GetService(name string) (interface{}, error) {
@@ -39,36 +40,29 @@ func (o *ServiceContainer) RegisterService(name string, s interface{}) {
 	o.Services[name] = s
 }
 
-func (o *ServiceContainer) AutoMigrate(dst ...interface{}) error {
-	return o.DB.AutoMigrate(dst...)
-}
-
 func NewDefault() (ans *ServiceContainer, err error) {
 	ans = &ServiceContainer{
 		Lock:     &sync.RWMutex{},
 		Services: make(map[string]interface{}),
+		Payloads: make(map[string]interface{}),
 	}
 	ans.Cfg, err = config.New("")
 	if err != nil {
 		return
 	}
 	var level zerolog.Level
-	var gormConfig gorm.Config
 	if ans.Cfg.Debug {
 		level = zerolog.DebugLevel
-		gormConfig.Logger = gormLogger.Default.LogMode(gormLogger.Info)
+		boil.DebugMode = true
 	} else {
 		level = zerolog.InfoLevel
 	}
 	ans.Logger = log.Level(level)
-	// if you set environment variable PG_HOST='' then do not initialize postgres connection
-	if len(ans.Cfg.PgHost) > 0 {
-		// TODO make gorm use zerolog
-		ans.DB, err = gorm.Open(postgres.Open(ans.Cfg.DSN()), &gormConfig)
-		if err != nil {
-			return
-		}
+	ans.DB, err = sql.Open("pgx", ans.Cfg.DSN())
+	if err != nil {
+		return
 	}
+	err = ans.DB.Ping()
 	return
 }
 

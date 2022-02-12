@@ -10,16 +10,21 @@ import (
 	"github.com/go-chi/chi"
 )
 
+func GetAuthenticatedUserID(ctx context.Context) (int, bool) {
+	id, ok := ctx.Value(Authenticated).(int)
+	return id, ok
+}
+
 func GetReqID(ctx context.Context) string {
 	return ctx.Value(RidKey).(string)
 }
 
-func GetUintUrlParam(r *http.Request, name string) (uint, error) {
+func GetIntUrlParam(r *http.Request, name string) (int, error) {
 	s, err := GetUrlParam(r, name)
 	if err != nil {
 		return 0, err
 	}
-	n, err := strconv.ParseUint(s, 10, 64)
+	n, err := strconv.Atoi(s)
 	if err != nil {
 		ae := ApiError{
 			StatusCode: http.StatusBadRequest,
@@ -27,7 +32,7 @@ func GetUintUrlParam(r *http.Request, name string) (uint, error) {
 		}
 		return 0, &ae
 	}
-	return uint(n), nil
+	return n, nil
 }
 
 func GetUrlParam(r *http.Request, name string) (string, error) {
@@ -42,13 +47,10 @@ func GetUrlParam(r *http.Request, name string) (string, error) {
 	return value, nil
 }
 
-func Bind(body io.Reader, out interface{}, validate bool) error {
+func Bind(body io.Reader, out interface{}) error {
 	err := json.NewDecoder(body).Decode(out)
 	if err != nil {
 		return err
-	}
-	if validate {
-		return Validate.Struct(out)
 	}
 	return nil
 }
