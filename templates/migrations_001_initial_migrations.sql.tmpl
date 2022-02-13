@@ -45,6 +45,8 @@ CREATE TABLE user_roles(
     FOREIGN KEY(role_id) REFERENCES roles(id) ON DELETE CASCADE
 );
 
+CREATE INDEX user_roles_role_id ON user_roles(role_id);
+
 ---- create above / drop below ----
 
 DROP TABLE users_roles;
