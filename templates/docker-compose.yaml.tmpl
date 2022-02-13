@@ -1,21 +1,19 @@
 volumes:
-  postgres_data_todo:
+    postgres_data_{{ .DbName }}:
 
 networks:
-  todo-network:
+  {{ .DockerNetwork }}:
 
 services:
   db:
     image: postgres:13-alpine
-    environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-      - POSTGRES_DB
+    env_file:
+      - .env
     expose:
       - "5432"
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_data_todo:/var/lib/postgresql/data
+      - postgres_data_{{ .DbName }}:/var/lib/postgresql/data
     networks:
-      - todo-network
+      - {{ .DockerNetwork }}

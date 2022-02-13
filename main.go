@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"embed"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"text/template"
+	"time"
 
+	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/manifoldco/promptui"
 )
 
@@ -17,23 +20,31 @@ import (
 var rootFs embed.FS
 
 type appConfig struct {
-	FolderName  string
+	AppName     string
 	PackageName string
+
+	ServerAddress string
+
+	DbHost     string
+	DbPort     string
+	DbName     string
+	DbUser     string
+	DbPassword string
+
+	TokenSecret string
+
+	Debug string
+
+	DockerNetwork string
+	DockerDbHost  string
 }
 
 func main() {
-	var (
-		err error
-		cfg appConfig
-	)
-	cfg.FolderName, err = stringPrompt("Enter folder name (no spaces)", "")
+	cfg, err := readConfig()
 	if err != nil {
 		log.Panic(err)
 	}
-	cfg.PackageName, err = stringPrompt("Enter the go package name (example: github.com/username/simple-api)", "")
-	if err != nil {
-		log.Panic(err)
-	}
+	log.Println("Setting up project skeleton")
 
 	if err := setUpDirectories(cfg); err != nil {
 		log.Panic(err)
@@ -42,18 +53,79 @@ func main() {
 		log.Panic(err)
 	}
 
+	log.Println("Initializing go modules")
+	if err := goModules(cfg); err != nil {
+		log.Panic(err)
+	}
+
+	log.Println("setting up database (it will try to ping db for 3 minutes or until docker-compose is ready)")
+	if err := setUpDb(cfg); err != nil {
+		log.Panic(err)
+	}
+
+	log.Println("generating models from db")
+	if err := generateModels(cfg); err != nil {
+		log.Panic(err)
+	}
+
 	fmt.Printf("\n🎉 Congratulations! Your new application is ready.")
 	fmt.Printf("\nTo begin execute the following:\n\n")
-	fmt.Printf("   cd %s\n", cfg.FolderName)
-	fmt.Printf("   go run .\n")
+	fmt.Printf("   cd %s\n", cfg.AppName)
+	fmt.Printf("   make run\n")
+}
+
+func readConfig() (appConfig, error) {
+	type entry struct {
+		message        string
+		defaultValue   string
+		storeTo        *string
+		acceptedValues []string
+	}
+	var cfg appConfig
+	params := []entry{
+		{message: "Enter app name (no spaces)", storeTo: &cfg.AppName},
+		{message: "Enter go package name", storeTo: &cfg.PackageName},
+		{message: "Enter listen addres", defaultValue: ":8080", storeTo: &cfg.ServerAddress},
+
+		{message: "Enter database host", defaultValue: "localhost", storeTo: &cfg.DbHost},
+		{message: "Enter database port", defaultValue: "5432", storeTo: &cfg.DbPort},
+		{message: "Enter database name", storeTo: &cfg.DbName},
+		{message: "Enter database user", storeTo: &cfg.DbUser},
+		{message: "Enter database password", storeTo: &cfg.DbPassword},
+		{message: "Enter secret", storeTo: &cfg.TokenSecret},
+		{message: "Enable debug? (true || false)", defaultValue: "true", storeTo: &cfg.Debug,
+			acceptedValues: []string{"true", "false"}},
+	}
+	for _, p := range params {
+		v, err := stringPrompt(p.message, p.defaultValue)
+		if err != nil {
+			return cfg, err
+		}
+		if len(p.acceptedValues) > 0 {
+			isAccepted := false
+			for _, accepted := range p.acceptedValues {
+				if accepted == v {
+					isAccepted = true
+					break
+				}
+			}
+			if !isAccepted {
+				return cfg, fmt.Errorf("value %s not accepted", v)
+			}
+		}
+		*p.storeTo = v
+	}
+	cfg.DockerNetwork = "network_" + strings.ReplaceAll(cfg.AppName, "/", "_")
+	cfg.DockerDbHost = "db"
+	return cfg, nil
 }
 
 func setUpDirectories(cfg appConfig) error {
-	if err := os.Mkdir(cfg.FolderName, 0755); err != nil {
+	if err := os.Mkdir(cfg.AppName, 0755); err != nil {
 		return err
 	}
 
-	if err := os.Chdir(cfg.FolderName); err != nil {
+	if err := os.Chdir(cfg.AppName); err != nil {
 		return err
 	}
 
@@ -116,8 +188,53 @@ func setUpTemplates(cfg appConfig) error {
 			return err
 		}
 	}
-	err = goModules(cfg)
-	return err
+	return nil
+}
+
+func setUpDb(cfg appConfig) error {
+	if err := startDockerDb(cfg); err != nil {
+		return err
+	}
+	cmd := exec.Command("make", "migrate-up")
+	return runCommand(cmd)
+}
+
+func generateModels(cfg appConfig) error {
+	cmd := exec.Command("make", "generate-models")
+	return runCommand(cmd)
+}
+
+func startDockerDb(cfg appConfig) error {
+	cmd := exec.Command("make", "db-start")
+	if err := runCommand(cmd); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			time.Sleep(5 * time.Second)
+			if err := testDbConnection(ctx, cfg); err == nil {
+				return nil
+			} else {
+				log.Println("Error pinging db: " + err.Error())
+			}
+		}
+	}
+}
+
+func testDbConnection(ctx context.Context, cfg appConfig) error {
+	dsn := fmt.Sprintf("host=%s port=%s dbname=%s user=%s password=%s",
+		cfg.DbHost, cfg.DbPort, cfg.DbName, cfg.DbUser, cfg.DbPassword)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.PingContext(ctx)
 }
 
 func stringPrompt(label, defaultValue string) (string, error) {
@@ -141,20 +258,7 @@ func goModules(cfg appConfig) error {
 }
 
 func runCommand(cmd *exec.Cmd) error {
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	slurp, _ := io.ReadAll(stderr)
-	fmt.Printf("%s\n", slurp)
-
-	if err := cmd.Wait(); err != nil {
-		return err
-	}
-	return nil
+	cmd.Stderr = os.Stdout
+	cmd.Stdout = os.Stdout
+	return cmd.Run()
 }

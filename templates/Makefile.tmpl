@@ -1,0 +1,40 @@
+.PHONY: default
+default: help
+
+
+# generate help info from comments: thanks to https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
+.PHONY: help
+help: ## help information about make commands
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' 
+
+.PHONY: db-start
+db-start: ## start the database
+	docker-compose up -d db
+
+.PHONY: db-stop
+db-stop: ## stops the database
+	docker-compose down db
+
+.PHONY: db-teardown
+	docker-compose down -v db
+
+.PHONY: migrate-up
+migrate-up: ## Runs the migrations up to the latest version
+	tern migrate -m ./migrations
+
+.PHONY: migrate-down
+migrate-down: ## Reverts latest migration
+	tern migrate -m ./migrations -d -1
+
+.PHONY: migrate-new
+migrate-new: ## creates a new migrations
+	tern new $@ -m ./migrations
+
+.PHONY: generate-models
+generate-models: ## generates models from db
+	go generate
+	go mod tidy
+
+.PHONY: run
+run: ## runs the app
+	env $$(cat .env | xargs) go run main.go

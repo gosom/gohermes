@@ -8,7 +8,7 @@ import (
 )
 
 type Config struct {
-	ServerAddress string `split_words:"true" default:":8080"`
+	ServerAddress string `envconfig:"SERVER_ADDRESS" default:":8080"`
 	// TODO add more http server configs
 
 	PostgresHost     string `envconfig:"POSTGRES_HOST" default:"db"`

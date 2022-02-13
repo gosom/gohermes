@@ -4,10 +4,10 @@ no-tests = true
 add-enum-types = true
 
 [psql]
-  dbname = "todo"
-  host   = "localhost"
-  port   = 5432
-  user   = "postgres"
-  pass   = "secret"
+  dbname = "{{ .DbName }}"
+  host   = "{{ .DbHost }}"
+  port   = {{ .DbPort }}
+  user   = "{{ .DbUser }}"
+  pass   = "{{ .DbPassword }}"
   sslmode = "disable"
   blacklist = ["schema_version", "casbin_rule"]
