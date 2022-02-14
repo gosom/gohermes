@@ -16,6 +16,8 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
+//go:generate protoc --go_out=. --go_opt=paths=source_relative     --go-grpc_out=. --go-grpc_opt=paths=source_relative     pkg/scheduler/schedulerrpc/scheduler.proto
+
 //go:embed templates/*.tmpl
 var rootFs embed.FS
 
@@ -33,7 +35,8 @@ type appConfig struct {
 
 	TokenSecret string
 
-	Debug string
+	UseScheduler string
+	Debug        string
 
 	DockerNetwork string
 	DockerDbHost  string
@@ -93,6 +96,7 @@ func readConfig() (appConfig, error) {
 		{message: "Enter database user", storeTo: &cfg.DbUser},
 		{message: "Enter database password", storeTo: &cfg.DbPassword},
 		{message: "Enter secret", storeTo: &cfg.TokenSecret},
+		{message: "Do you need a scheduler? (true || false)", defaultValue: "true", storeTo: &cfg.UseScheduler},
 		{message: "Enable debug? (true || false)", defaultValue: "true", storeTo: &cfg.Debug,
 			acceptedValues: []string{"true", "false"}},
 	}
@@ -130,12 +134,16 @@ func setUpDirectories(cfg appConfig) error {
 	}
 
 	subdirs := []string{
+		"commands",
 		"migrations",
 		"models",
 		"modelsext",
 		"routes",
 		"services",
 		"user",
+	}
+	if cfg.UseScheduler == "true" {
+		subdirs = append(subdirs, "scheduler")
 	}
 
 	for _, dirname := range subdirs {

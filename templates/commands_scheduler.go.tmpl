@@ -1,0 +1,29 @@
+package commands
+
+import (
+	"os"
+
+	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/scheduler"
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	var schedulerCmd = &cobra.Command{
+		Use:   "scheduler",
+		Short: "Starts the Scheduler GRPC server",
+		Run: func(cmd *cobra.Command, args []string) {
+			di, err := container.NewDefault()
+			if err != nil {
+				panic(err)
+			}
+
+            if err := scheduler.Run(context.Background(), di); err != nil {
+                os.Exit(2)
+            }else {
+                os.Exit()
+            }
+		},
+	}
+	RootCmd.AddCommand(schedulerCmd)
+}

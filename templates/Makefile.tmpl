@@ -35,6 +35,6 @@ generate-models: ## generates models from db
 	go generate
 	go mod tidy
 
-.PHONY: run
-run: ## runs the app
-	env $$(cat .env | xargs) go run main.go
+.PHONY: run-api
+run-api: ## runs the API 
+	env $$(cat .env | xargs) go run main.go api

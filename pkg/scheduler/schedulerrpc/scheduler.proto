@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package scheduler;
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/gosom/gohermes/scheduler;schedulerrpc";
+
+message ScheduledJob {
+   string id = 1;
+   string endpoint = 2;
+   bytes data = 3;
+   google.protobuf.Timestamp scheduled_at = 5;
+}
+  
+message CreateScheduledJobRequest {
+   ScheduledJob job = 1;
+}
+  
+message CreateScheduledJobResponse {
+   ScheduledJob job = 1;
+}
+  
+service ScheduledJobService {
+   rpc CreateScheduledJob (CreateScheduledJobRequest) returns (CreateScheduledJobResponse);
+}
