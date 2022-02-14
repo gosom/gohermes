@@ -56,13 +56,13 @@ func main() {
 		log.Panic(err)
 	}
 
-	log.Println("Initializing go modules")
-	if err := goModules(cfg); err != nil {
+	log.Println("setting up database (it will try to ping db for 3 minutes or until docker-compose is ready)")
+	if err := setUpDb(cfg); err != nil {
 		log.Panic(err)
 	}
 
-	log.Println("setting up database (it will try to ping db for 3 minutes or until docker-compose is ready)")
-	if err := setUpDb(cfg); err != nil {
+	log.Println("Initializing go modules")
+	if err := goModules(cfg); err != nil {
 		log.Panic(err)
 	}
 
@@ -72,9 +72,9 @@ func main() {
 	}
 
 	fmt.Printf("\n🎉 Congratulations! Your new application is ready.")
-	fmt.Printf("\nTo begin execute the following:\n\n")
+	fmt.Printf("\nTo begin see the makefile:\n\n")
 	fmt.Printf("   cd %s\n", cfg.AppName)
-	fmt.Printf("   make run\n")
+	fmt.Printf("   make\n")
 }
 
 func readConfig() (appConfig, error) {
@@ -254,11 +254,7 @@ func stringPrompt(label, defaultValue string) (string, error) {
 }
 
 func goModules(cfg appConfig) error {
-	cmd := exec.Command("go", "mod", "init", cfg.PackageName)
-	if err := runCommand(cmd); err != nil {
-		return err
-	}
-	cmd = exec.Command("go", "mod", "tidy")
+	cmd := exec.Command("go", "mod", "download", cfg.PackageName)
 	if err := runCommand(cmd); err != nil {
 		return err
 	}

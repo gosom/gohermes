@@ -38,3 +38,7 @@ generate-models: ## generates models from db
 .PHONY: run-api
 run-api: ## runs the API 
 	env $$(cat .env | xargs) go run main.go api
+
+.PHONY: run-scheduler
+run-scheduler: ## runs the Scheduler GRPC 
+	env $$(cat .env | xargs) go run main.go scheduler

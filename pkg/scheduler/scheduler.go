@@ -16,7 +16,7 @@ type SchedulerServer struct {
 	*schedulerrpc.UnimplementedScheduledJobServiceServer
 }
 
-func (o *SchedulerServer) Run(ctx context.Context, di *container.ServiceContainer) error {
+func Run(ctx context.Context, di *container.ServiceContainer) error {
 	repo, err := newSchedulerRepository(di.Cfg.DSN(), di.Logger)
 	if err != nil {
 		return err

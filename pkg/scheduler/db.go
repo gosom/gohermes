@@ -9,28 +9,30 @@ import (
 )
 
 const dbschema = `
+CREATE SCHEMA IF NOT EXISTS scheduler;
+SET search_path TO scheduler;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE SCHEMA IF NOT EXISTS scheduler 
-	CREATE TABLE IF NOT EXISTS jobs(
-		id UUID NOT NULL DEFAULT uuid_generate_v4(),
-		data JSONB NOT NULL,
-		scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL
-		created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-		PRIMARY KEY(id)
-	)
-	CREATE INDEX IF NOT EXISTS jobs_scheduled_at_idx ON jobs(scheduled_at)
+CREATE TABLE IF NOT EXISTS jobs(
+	id UUID NOT NULL DEFAULT uuid_generate_v4(),
+	data JSONB NOT NULL,
+	scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY(id)
+);
+CREATE INDEX IF NOT EXISTS jobs_scheduled_at_idx ON jobs(scheduled_at);
 
-	CREATE TABLE IF NOT EXIST job_executions(
-		id SERIAL NOT NULL,
-		job_id UUID NOT NULL,
-		created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-		success BOOLEAN NOT NULL,
-		msg VARCHAR(100) NOT NULL,
-		PRIMARY KEY(id),
-		FOREIGN KEY(job_id)
-			REFERENCES jobs(id) ON DELETE CASCADE,
-		UNIQUE(job_id, success) WHEN success = 't'
-	);
+CREATE TABLE IF NOT EXISTS job_executions(
+	id SERIAL NOT NULL,
+	job_id UUID NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	success BOOLEAN NOT NULL,
+	msg VARCHAR(100) NOT NULL,
+	PRIMARY KEY(id),
+	FOREIGN KEY(job_id)
+		REFERENCES jobs(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS job_executions_success ON job_executions (job_id, success)
+WHERE success;
 `
 
 type schedulerRepository struct {
@@ -51,6 +53,14 @@ func newSchedulerRepository(dsn string, logger zerolog.Logger) (*schedulerReposi
 }
 
 func (o *schedulerRepository) migrate(ctx context.Context) error {
-	_, err := o.db.ExecContext(ctx, dbschema)
-	return err
+	tx, err := o.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, dbschema)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }

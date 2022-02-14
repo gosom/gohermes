@@ -2,6 +2,7 @@ package commands
 
 import (
 	"os"
+    "context"
 
 	"github.com/gosom/gohermes/pkg/container"
 	"github.com/gosom/gohermes/pkg/scheduler"
@@ -21,7 +22,7 @@ func init() {
             if err := scheduler.Run(context.Background(), di); err != nil {
                 os.Exit(2)
             }else {
-                os.Exit()
+                os.Exit(0)
             }
 		},
 	}
