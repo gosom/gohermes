@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/gosom/gohermes/pkg/scheduler/schedulerrpc"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/rs/zerolog"
 )
@@ -14,9 +15,10 @@ SET search_path TO scheduler;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS jobs(
 	id UUID NOT NULL DEFAULT uuid_generate_v4(),
+	endpoint VARCHAR(254) NOT NULL,
 	data JSONB NOT NULL,
 	scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
-	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'utc'),
 	PRIMARY KEY(id)
 );
 CREATE INDEX IF NOT EXISTS jobs_scheduled_at_idx ON jobs(scheduled_at);
@@ -34,6 +36,8 @@ CREATE TABLE IF NOT EXISTS job_executions(
 CREATE UNIQUE INDEX IF NOT EXISTS job_executions_success ON job_executions (job_id, success)
 WHERE success;
 `
+
+const insertQ = `INSERT INTO jobs(endpoint, data, scheduled_at) VALUES($1, $2, $3) RETURNING id`
 
 type schedulerRepository struct {
 	log zerolog.Logger
@@ -63,4 +67,21 @@ func (o *schedulerRepository) migrate(ctx context.Context) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (o *schedulerRepository) insert(ctx context.Context, req *schedulerrpc.CreateScheduledJobRequest) (string, error) {
+	tx, err := o.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var jobId string
+	err = tx.QueryRowContext(
+		ctx, insertQ, req.Endpoint, req.Data, req.ScheduledAt.AsTime(),
+	).Scan(&jobId)
+	if err != nil {
+		return jobId, err
+	}
+	return jobId, tx.Commit()
+
 }

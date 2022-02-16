@@ -1,10 +1,10 @@
 package commands
 
 import (
+	"context"
+	"fmt"
 	"os"
-    "context"
 
-	"github.com/gosom/gohermes/pkg/container"
 	"github.com/gosom/gohermes/pkg/scheduler"
 	"github.com/spf13/cobra"
 )
@@ -14,16 +14,17 @@ func init() {
 		Use:   "scheduler",
 		Short: "Starts the Scheduler GRPC server",
 		Run: func(cmd *cobra.Command, args []string) {
-			di, err := container.NewDefault()
+			cfg, err := scheduler.NewConfig("")
 			if err != nil {
 				panic(err)
 			}
 
-            if err := scheduler.Run(context.Background(), di); err != nil {
-                os.Exit(2)
-            }else {
-                os.Exit(0)
-            }
+			if err := scheduler.Run(context.Background(), cfg); err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(2)
+			} else {
+				os.Exit(0)
+			}
 		},
 	}
 	RootCmd.AddCommand(schedulerCmd)

@@ -6,18 +6,21 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/gosom/gohermes/scheduler;schedulerrpc";
 
 message ScheduledJob {
-   string id = 1;
-   string endpoint = 2;
-   bytes data = 3;
-   google.protobuf.Timestamp scheduled_at = 5;
+    string id = 1;
+    string endpoint = 2;
+    bytes data = 3;
+    google.protobuf.Timestamp scheduled_at = 4;
+    google.protobuf.Timestamp created_at = 5;
 }
   
 message CreateScheduledJobRequest {
-   ScheduledJob job = 1;
+    string endpoint = 1;
+    string data = 2;
+    google.protobuf.Timestamp scheduled_at = 4;
 }
   
 message CreateScheduledJobResponse {
-   ScheduledJob job = 1;
+   string id = 1;
 }
   
 service ScheduledJobService {

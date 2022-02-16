@@ -40,6 +40,17 @@ type appConfig struct {
 
 	DockerNetwork string
 	DockerDbHost  string
+
+	SchedulerServerAddress string
+
+	SchedulerDbHost     string
+	SchedulerDbPort     string
+	SchedulerDbName     string
+	SchedulerDbUser     string
+	SchedulerDbPassword string
+	SchedulerSecret     string
+	SchedulerApiKey     string
+	SchedulerDebug      string
 }
 
 func main() {
@@ -88,7 +99,7 @@ func readConfig() (appConfig, error) {
 	params := []entry{
 		{message: "Enter app name (no spaces)", storeTo: &cfg.AppName},
 		{message: "Enter go package name", storeTo: &cfg.PackageName},
-		{message: "Enter listen addres", defaultValue: ":8080", storeTo: &cfg.ServerAddress},
+		{message: "Enter listen address", defaultValue: ":8080", storeTo: &cfg.ServerAddress},
 
 		{message: "Enter database host", defaultValue: "localhost", storeTo: &cfg.DbHost},
 		{message: "Enter database port", defaultValue: "5432", storeTo: &cfg.DbPort},
@@ -96,10 +107,11 @@ func readConfig() (appConfig, error) {
 		{message: "Enter database user", storeTo: &cfg.DbUser},
 		{message: "Enter database password", storeTo: &cfg.DbPassword},
 		{message: "Enter secret", storeTo: &cfg.TokenSecret},
-		{message: "Do you need a scheduler? (true || false)", defaultValue: "true", storeTo: &cfg.UseScheduler},
 		{message: "Enable debug? (true || false)", defaultValue: "true", storeTo: &cfg.Debug,
 			acceptedValues: []string{"true", "false"}},
+		{message: "Do you need a scheduler? (true || false)", defaultValue: "true", storeTo: &cfg.UseScheduler},
 	}
+
 	for _, p := range params {
 		v, err := stringPrompt(p.message, p.defaultValue)
 		if err != nil {
@@ -119,6 +131,41 @@ func readConfig() (appConfig, error) {
 		}
 		*p.storeTo = v
 	}
+
+	if cfg.UseScheduler == "true" {
+		schedulerParams := []entry{
+			{message: "Enter scheduler listen address", defaultValue: ":50051", storeTo: &cfg.SchedulerServerAddress},
+			{message: "Enter scheduler database host", defaultValue: cfg.DbHost, storeTo: &cfg.SchedulerDbHost},
+			{message: "Enter scheduler database port", defaultValue: cfg.DbPort, storeTo: &cfg.SchedulerDbPort},
+			{message: "Enter scheduler database name", defaultValue: cfg.DbName, storeTo: &cfg.SchedulerDbName},
+			{message: "Enter scheduler database user", defaultValue: cfg.DbUser, storeTo: &cfg.SchedulerDbUser},
+			{message: "Enter scheduler database password", defaultValue: cfg.DbPassword, storeTo: &cfg.SchedulerDbPassword},
+			{message: "Enter apiKey", storeTo: &cfg.SchedulerApiKey},
+			{message: "Enter secret", storeTo: &cfg.SchedulerSecret},
+			{message: "Enable debug? (true || false)", defaultValue: "true", storeTo: &cfg.SchedulerDebug,
+				acceptedValues: []string{"true", "false"}},
+		}
+		for _, p := range schedulerParams {
+			v, err := stringPrompt(p.message, p.defaultValue)
+			if err != nil {
+				return cfg, err
+			}
+			if len(p.acceptedValues) > 0 {
+				isAccepted := false
+				for _, accepted := range p.acceptedValues {
+					if accepted == v {
+						isAccepted = true
+						break
+					}
+				}
+				if !isAccepted {
+					return cfg, fmt.Errorf("value %s not accepted", v)
+				}
+			}
+			*p.storeTo = v
+		}
+	}
+
 	cfg.DockerNetwork = "network_" + strings.ReplaceAll(cfg.AppName, "/", "_")
 	cfg.DockerDbHost = "db"
 	return cfg, nil
