@@ -18,7 +18,8 @@ type Config struct {
 	Secret string `envconfig:"SCHEDULER_SECRET" default:"secret"`
 	ApiKey string `envconfig:"SCHEDULER_API_KEY" default:"apikey"`
 
-	Debug bool `envconfig:"SCHEDULER_DEBUG" default:"true"`
+	Debug     bool `envconfig:"SCHEDULER_DEBUG" default:"true"`
+	Executors int  `envconfig:"SCHEDULER_EXECUTORS" default:"10"`
 }
 
 func (o Config) DSN() string {

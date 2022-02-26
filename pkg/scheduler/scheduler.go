@@ -3,32 +3,20 @@ package scheduler
 import (
 	"context"
 	"net"
+	"sync"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/gosom/gohermes/pkg/scheduler/schedulerrpc"
 )
 
-type SchedulerServer struct {
-	repo *schedulerRepository
-	*schedulerrpc.UnimplementedScheduledJobServiceServer
-}
-
 func Run(ctx context.Context, cfg *Config) error {
-	var level zerolog.Level
-	if cfg.Debug {
-		level = zerolog.DebugLevel
-	} else {
-		level = zerolog.InfoLevel
-	}
-	logger := log.Level(level)
+	logger := getLogger(cfg)
 	repo, err := newSchedulerRepository(cfg.DSN(), logger)
 	if err != nil {
 		return err
@@ -36,6 +24,44 @@ func Run(ctx context.Context, cfg *Config) error {
 	if err := repo.migrate(ctx); err != nil {
 		return err
 	}
+
+	monitor, err := NewMonitorScheduledJobs(
+		logger, repo, cfg.Executors,
+	)
+	if err != nil {
+		return err
+	}
+
+	server, err := getGrpcServer(cfg, logger, repo)
+	if err != nil {
+		return err
+	}
+	lis, err := net.Listen("tcp", cfg.ServerAddress)
+	if err != nil {
+		return err
+	}
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if err := monitor.Run(ctx); err != nil {
+			logger.Error().Msgf("monitor exited: %s", err.Error())
+		}
+	}()
+	// TODO return an error channel so we will return the error
+	go func() {
+		defer wg.Done()
+		if err := server.Serve(lis); err != nil {
+			logger.Error().Msgf("grpcServer: %s", err.Error())
+		} else {
+			logger.Info().Msgf("grcpServer: clean exit")
+		}
+	}()
+	wg.Wait()
+	return nil
+}
+
+func getGrpcServer(cfg *Config, logger zerolog.Logger, repo *schedulerRepository) (*grpc.Server, error) {
 	schedulerServer := SchedulerServer{repo: repo}
 
 	recoveryOpts := []grpc_recovery.Option{
@@ -53,35 +79,16 @@ func Run(ctx context.Context, cfg *Config) error {
 		),
 	)
 	schedulerrpc.RegisterScheduledJobServiceServer(server, &schedulerServer)
-	lis, err := net.Listen("tcp", cfg.ServerAddress)
-	if err != nil {
-		return err
-	}
-	return server.Serve(lis)
+	return server, nil
 }
 
-func recoveryFunc(p interface{}) (err error) {
-	return status.Errorf(codes.Unknown, "panic triggered: %v", p)
-}
-
-func apiAuthWrapper(cfg *Config) func(ctx context.Context) (context.Context, error) {
-	return func(ctx context.Context) (context.Context, error) {
-		token, err := grpc_auth.AuthFromMD(ctx, "x-api-key")
-		if err != nil {
-			return nil, err
-		}
-		if token != cfg.ApiKey {
-			return nil, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", err)
-		}
-		return ctx, nil
+func getLogger(cfg *Config) zerolog.Logger {
+	var level zerolog.Level
+	if cfg.Debug {
+		level = zerolog.DebugLevel
+	} else {
+		level = zerolog.InfoLevel
 	}
-}
-
-func (o *SchedulerServer) CreateScheduledJob(ctx context.Context, req *schedulerrpc.CreateScheduledJobRequest) (*schedulerrpc.CreateScheduledJobResponse, error) {
-	id, err := o.repo.insert(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	resp := schedulerrpc.CreateScheduledJobResponse{Id: id}
-	return &resp, nil
+	logger := log.Level(level)
+	return logger
 }

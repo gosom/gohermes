@@ -11,6 +11,7 @@ message ScheduledJob {
     bytes data = 3;
     google.protobuf.Timestamp scheduled_at = 4;
     google.protobuf.Timestamp created_at = 5;
+    bool selected = 6;
 }
   
 message CreateScheduledJobRequest {
