@@ -197,6 +197,13 @@ func (o *UserService) Login(ctx context.Context, payload LoginUserPayload) (ans 
 		err = &ae
 		return
 	}
+
+	if !u.Active {
+		ae := utils.NewAuthenticationError("Account inactive")
+		err = &ae
+		return
+	}
+
 	mu := modelsext.User{u}
 	ans.Access, err = auth.CreateJwtAccessToken(
 		o.di.Cfg.TokenSecret, o.di.Cfg.TokenIssuer,
@@ -219,4 +226,38 @@ func (o *UserService) Login(ctx context.Context, payload LoginUserPayload) (ans 
 	}
 
 	return
+}
+
+func (o *UserService) ScheduleActivationEmail(ctx context.Context, payload ActivationEmailPayload) error {
+	return nil
+}
+
+func (o *UserService) Activate(ctx context.Context, payload ActivateUserPayload) error {
+	authenticatedUser, err := auth.ValidateAccessToken(o.di.Cfg.TokenSecret, payload.Token)
+	if err != nil {
+		ae := utils.NewAuthenticationError("")
+		return &ae
+	}
+	// TODO
+	// I prefer todo directtly an update and check the affected rows
+	u, err := models.Users(qm.Where("id = ?", authenticatedUser.ID)).One(ctx, o.di.DB)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		ae := utils.NewAuthenticationError("")
+		return &ae
+
+	}
+	if err != nil {
+		ae := utils.NewInternalServerError(err.Error())
+		return &ae
+	}
+
+	if u.Active {
+		ae := utils.NewBadRequestError("user already active")
+		return &ae
+	}
+
+	u.Active = true
+	_, err = u.Update(ctx, o.di.DB, boil.Infer())
+
+	return err
 }

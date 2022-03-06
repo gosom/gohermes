@@ -17,3 +17,11 @@ services:
       - postgres_data_{{ .DbName }}:/var/lib/postgresql/data
     networks:
       - {{ .DockerNetwork }}
+  redis:
+    image: redis:alpine
+    expose:
+      - "6379"
+    ports:
+      - "127.0.0.1:6479:6479"
+    networks:
+      - {{ .DockerNetwork }}

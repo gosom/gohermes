@@ -33,7 +33,7 @@ migrate-new: ## creates a new migrations
 .PHONY: generate-models
 generate-models: ## generates models from db
 	go generate
-	go mod tidy
+	#go mod tidy
 
 .PHONY: run-api
 run-api: ## runs the API 

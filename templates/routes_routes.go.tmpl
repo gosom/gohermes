@@ -17,15 +17,19 @@ func SetUpRoutes(di *container.ServiceContainer, srv *server.Server) error {
 
 	router.Get("/health", server.HealthHandler(di))
 
-	// public endpoints
-	router.Post("/register", user.RegisterUserHandler(di))
-	router.Post("/login", user.LoginUserHandler(di))
-
 	router.Route("/users", func(r chi.Router) {
 		// By default support api key and JWT
 		//r.Use(auth.AuthenticationXAPIKey(di))
 		r.Use(auth.AuthenticationJWT(di))
 		r.Use(auth.Authorization(di))
+
+		// public endpoints
+		r.Group(func(r chi.Router) {
+			router.Post("/register", user.RegisterUserHandler(di))
+			router.Post("/login", user.LoginUserHandler(di))
+			router.Get(`/activate/{token:\w+}`, user.ActivateUserHandler(di))
+			router.Post(`/activation-email`, user.ActivationEmailHandler(di))
+		})
 
 		// Here to support only JWT
 		r.Group(func(r chi.Router) {
