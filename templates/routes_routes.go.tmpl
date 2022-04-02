@@ -28,7 +28,6 @@ func SetUpRoutes(di *container.ServiceContainer, srv *server.Server) error {
 			router.Post("/register", user.RegisterUserHandler(di))
 			router.Post("/login", user.LoginUserHandler(di))
 			router.Get(`/activate/{token:\w+}`, user.ActivateUserHandler(di))
-			router.Post(`/activation-email`, user.ActivationEmailHandler(di))
 		})
 
 		// Here to support only JWT

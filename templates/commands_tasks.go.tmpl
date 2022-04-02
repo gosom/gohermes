@@ -1,0 +1,47 @@
+package commands
+
+import (
+	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/tasks"
+	"github.com/spf13/cobra"
+
+	"{{ .AppName }}/services"
+)
+
+func init() {
+	var tasksCmd = &cobra.Command{
+		Use:   "tasks",
+		Short: "Starts the background task worker",
+		Run: func(cmd *cobra.Command, args []string) {
+			di, err := container.NewDefault()
+			if err != nil {
+				panic(err)
+			}
+
+			if err := services.RegisterServices(di); err != nil {
+				panic(err)
+			}
+			bgtasks, err := backgroundTasks(di)
+			if err != nil {
+				panic(err)
+			}
+			srv := tasks.NewDefaultAsyncWorker(di, bgtasks...)
+
+			if err := srv.Run(); err != nil {
+				panic(err)
+			}
+		},
+	}
+	RootCmd.AddCommand(tasksCmd)
+}
+
+func backgroundTasks(di *container.ServiceContainer) ([]tasks.Task, error) {
+	email_delivery, err := tasks.NewEmailDeliveryProcessor(di)
+	if err != nil {
+		return nil, err
+	}
+	items := []tasks.Task{
+		{tasks.TypeEmailDelivery, email_delivery},
+	}
+	return items, nil
+}

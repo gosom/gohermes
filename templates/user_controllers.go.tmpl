@@ -123,21 +123,3 @@ func ActivateUserHandler(di *container.ServiceContainer) http.HandlerFunc {
 		utils.RenderJson(r, w, http.StatusOK, nil)
 	}
 }
-
-func ActivationEmailHandler(di *container.ServiceContainer) http.HandlerFunc {
-	srv := GetFromDi(di)
-	return func(w http.ResponseWriter, r *http.Request) {
-		var payload ActivationEmailPayload
-		if err := utils.Bind(r.Body, &payload); err != nil {
-			apiErr := utils.NewBadRequestError(err.Error())
-			utils.RenderJson(r, w, http.StatusBadRequest, apiErr)
-			return
-		}
-		err := srv.ScheduleActivationEmail(r.Context(), payload)
-		if ae := utils.ApiErrorFromErr(err); ae != nil {
-			utils.RenderJson(r, w, ae.StatusCode, ae)
-			return
-		}
-		utils.RenderJson(r, w, http.StatusOK, nil)
-	}
-}

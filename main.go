@@ -59,6 +59,18 @@ func main() {
 		log.Panic(err)
 	}
 	log.Println("Setting up project skeleton")
+	var allOk bool
+	defer func() {
+		if !allOk {
+			log.Println("Doing cleanup of folder " + cfg.AppName)
+			os.Remove("./" + cfg.AppName)
+			cmd := exec.Command("docker-compose", "down", "-v")
+			runCommand(cmd)
+		} else {
+			cmd := exec.Command("docker-compose", "down")
+			runCommand(cmd)
+		}
+	}()
 
 	if err := setUpDirectories(cfg); err != nil {
 		log.Panic(err)
@@ -86,6 +98,7 @@ func main() {
 	fmt.Printf("\nTo begin see the makefile:\n\n")
 	fmt.Printf("   cd %s\n", cfg.AppName)
 	fmt.Printf("   make\n")
+	allOk = true
 }
 
 func readConfig() (appConfig, error) {
@@ -94,6 +107,7 @@ func readConfig() (appConfig, error) {
 		defaultValue   string
 		storeTo        *string
 		acceptedValues []string
+		mandatory      bool
 	}
 	var cfg appConfig
 	params := []entry{

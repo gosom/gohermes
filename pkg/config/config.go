@@ -22,6 +22,12 @@ type Config struct {
 	AccessTokenDuration  time.Duration `envconfig:"ACCESS_TOKEN_DURATION" default:"15m"`
 	RefreshTokenDuration time.Duration `envconfig:"REFRRESH_TOKEN_DURATION" default:"30m"`
 
+	RedisAddr    string `envconfig:"REDIS_ADDR" default:"localhost:6479"`
+	Email        string `envconfig:"EMAIL" default:"giorgos@example.org"`
+	EmailBackend string `envconfig:"EMAIL_BACKEND" default:"console"`
+
+	WorkerConcurrency int `envconfig:"WORKER_CONCURRENCY" default:"10"`
+
 	Debug bool `split_words:"true" default:"true"`
 }
 

@@ -11,13 +11,6 @@ help: ## help information about make commands
 db-start: ## start the database
 	docker-compose up -d db
 
-.PHONY: db-stop
-db-stop: ## stops the database
-	docker-compose down db
-
-.PHONY: db-teardown
-	docker-compose down -v db
-
 .PHONY: migrate-up
 migrate-up: ## Runs the migrations up to the latest version
 	tern migrate -m ./migrations
@@ -33,7 +26,6 @@ migrate-new: ## creates a new migrations
 .PHONY: generate-models
 generate-models: ## generates models from db
 	go generate
-	#go mod tidy
 
 .PHONY: run-api
 run-api: ## runs the API 
@@ -42,3 +34,7 @@ run-api: ## runs the API
 .PHONY: run-scheduler
 run-scheduler: ## runs the Scheduler GRPC 
 	env $$(cat .env | xargs) go run main.go scheduler
+
+.PHONY: run-taks
+run-tasks: ## runs the taskqueue
+	env $$(cat .env | xargs) go run main.go tasks

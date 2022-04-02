@@ -10,19 +10,22 @@ import (
 	"strings"
 
 	"github.com/casbin/casbin/v2"
-	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"github.com/gosom/gohermes/pkg/auth"
 	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/tasks"
 	"github.com/gosom/gohermes/pkg/utils"
+	"github.com/hibiken/asynq"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 
     "{{ .PackageName }}/models"
 	"{{ .PackageName }}/modelsext"
 )
 
 type UserService struct {
-	di       *container.ServiceContainer
-	enforcer *casbin.Enforcer
+	di        *container.ServiceContainer
+	enforcer  *casbin.Enforcer
+	taskqueue *asynq.Client
 }
 
 func GetFromDi(di *container.ServiceContainer) *UserService {
@@ -39,6 +42,11 @@ func NewUserService(di *container.ServiceContainer) *UserService {
 		di: di,
 	}
 	ans.enforcer = auth.EnforcerFromDi(di)
+	tq, err := di.GetService("taskqueue")
+	if err != nil {
+		panic(err)
+	}
+	ans.taskqueue = tq.(*asynq.Client)
 	return &ans
 }
 
@@ -121,6 +129,11 @@ func (o *UserService) Register(ctx context.Context, p RegisterUserPayload) (err 
 		return
 	}
 
+	if err = o.SendActivationEmail(ctx, u); err != nil {
+		o.di.Logger.Error().
+			Msgf("cannot sent registration email to %s: %s", u.Email)
+	}
+
 	return
 }
 
@@ -168,7 +181,6 @@ func (o *UserService) GenerateApiKey(ctx context.Context, userID int) (string, e
 func (o *UserService) GetApiKeys(ctx context.Context, userID int) ([]*models.APIKey, error) {
 	apiKeys, err := models.APIKeys(qm.Where("user_id = ?", userID)).All(ctx, o.di.DB)
 	return apiKeys, err
-
 }
 
 func (o *UserService) Login(ctx context.Context, payload LoginUserPayload) (ans LoginResponse, err error) {
@@ -228,10 +240,6 @@ func (o *UserService) Login(ctx context.Context, payload LoginUserPayload) (ans 
 	return
 }
 
-func (o *UserService) ScheduleActivationEmail(ctx context.Context, payload ActivationEmailPayload) error {
-	return nil
-}
-
 func (o *UserService) Activate(ctx context.Context, payload ActivateUserPayload) error {
 	authenticatedUser, err := auth.ValidateAccessToken(o.di.Cfg.TokenSecret, payload.Token)
 	if err != nil {
@@ -260,4 +268,14 @@ func (o *UserService) Activate(ctx context.Context, payload ActivateUserPayload)
 	_, err = u.Update(ctx, o.di.DB, boil.Infer())
 
 	return err
+}
+
+func (o *UserService) SendActivationEmail(ctx context.Context, u models.User) error {
+	task, err := tasks.NewEmailDeliveryTask(o.di.Cfg.Email, u.Email, "test", "hello")
+	info, err := o.taskqueue.Enqueue(task)
+	if err != nil {
+		return err
+	}
+	o.di.Logger.Info().Msgf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
+	return nil
 }

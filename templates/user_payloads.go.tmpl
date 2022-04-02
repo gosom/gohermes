@@ -12,10 +12,6 @@ type LoginUserPayload struct {
 	Password string `json:"password" validate:"required"`
 }
 
-type ActivationEmailPayload struct {
-	Email string `json:"email" validate:"required,lte=100,email"`
-}
-
 type ActivateUserPayload struct {
 	Token string `json:"token"`
 }

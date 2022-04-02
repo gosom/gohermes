@@ -14,14 +14,31 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_data_{{ .DbName }}:/var/lib/postgresql/data
+    - postgres_data_{{ .DbName }}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apptest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - {{ .DockerNetwork }}
+
   redis:
     image: redis:alpine
     expose:
       - "6379"
     ports:
-      - "127.0.0.1:6479:6479"
+      - "127.0.0.1:6479:6379"
     networks:
       - {{ .DockerNetwork }}
+
+  tasksmonitor:
+    image: hibiken/asynqmon
+    environment:
+      - REDIS_ADDR=redis:6379
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - {{ .DockerNetwork }}
+    depends_on:
+      - redis

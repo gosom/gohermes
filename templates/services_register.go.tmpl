@@ -1,13 +1,30 @@
 package services
 
 import (
+	"fmt"
+
 	"github.com/gosom/gohermes/pkg/auth"
 	"github.com/gosom/gohermes/pkg/container"
+	"github.com/gosom/gohermes/pkg/notifications"
+	"github.com/hibiken/asynq"
 
     "{{ .PackageName }}/user"
 )
 
 func RegisterServices(di *container.ServiceContainer) error {
+	taskqueue := asynq.NewClient(asynq.RedisClientOpt{Addr: di.Cfg.RedisAddr})
+	di.RegisterService("taskqueue", taskqueue)
+
+	var email notifications.IEmail
+	switch di.Cfg.EmailBackend {
+	case "console":
+		email = &notifications.EmailBackendConsole{}
+	default:
+		return fmt.Errorf("unsupported email backed: %s", di.Cfg.EmailBackend)
+	}
+
+	di.RegisterService("email_backend", email)
+
 	enforcer, err := auth.NewEnforcer(di.DB, nil, nil)
 	if err != nil {
 		return err
