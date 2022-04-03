@@ -33,6 +33,9 @@ type appConfig struct {
 	DbUser     string
 	DbPassword string
 
+	RedisPort string
+	RedisHost string
+
 	TokenSecret string
 
 	UseScheduler string
@@ -63,12 +66,17 @@ func main() {
 	defer func() {
 		if !allOk {
 			log.Println("Doing cleanup of folder " + cfg.AppName)
-			os.Remove("./" + cfg.AppName)
-			cmd := exec.Command("docker-compose", "down", "-v")
+			cmd := exec.Command("rm", "-rf", "./"+cfg.AppName)
+			runCommand(cmd)
+			cmd = exec.Command("docker-compose", "down", "-v")
 			runCommand(cmd)
 		} else {
 			cmd := exec.Command("docker-compose", "down")
 			runCommand(cmd)
+			fmt.Printf("\n🎉 Congratulations! Your new application is ready.")
+			fmt.Printf("\nTo begin see the makefile:\n\n")
+			fmt.Printf("   cd %s\n", cfg.AppName)
+			fmt.Printf("   make\n")
 		}
 	}()
 
@@ -94,36 +102,36 @@ func main() {
 		log.Panic(err)
 	}
 
-	fmt.Printf("\n🎉 Congratulations! Your new application is ready.")
-	fmt.Printf("\nTo begin see the makefile:\n\n")
-	fmt.Printf("   cd %s\n", cfg.AppName)
-	fmt.Printf("   make\n")
 	allOk = true
 }
 
 func readConfig() (appConfig, error) {
 	type entry struct {
+		name           string
 		message        string
 		defaultValue   string
 		storeTo        *string
 		acceptedValues []string
 		mandatory      bool
+		updateDefault  []string
 	}
 	var cfg appConfig
 	params := []entry{
-		{message: "Enter app name (no spaces)", storeTo: &cfg.AppName},
-		{message: "Enter go package name", storeTo: &cfg.PackageName},
-		{message: "Enter listen address", defaultValue: ":8080", storeTo: &cfg.ServerAddress},
-
-		{message: "Enter database host", defaultValue: "localhost", storeTo: &cfg.DbHost},
-		{message: "Enter database port", defaultValue: "5432", storeTo: &cfg.DbPort},
-		{message: "Enter database name", storeTo: &cfg.DbName},
-		{message: "Enter database user", storeTo: &cfg.DbUser},
-		{message: "Enter database password", storeTo: &cfg.DbPassword},
-		{message: "Enter secret", storeTo: &cfg.TokenSecret},
-		{message: "Enable debug? (true || false)", defaultValue: "true", storeTo: &cfg.Debug,
+		{name: "appName", message: "Enter app name (no spaces)", storeTo: &cfg.AppName, mandatory: true,
+			updateDefault: []string{"dbname", "dbuser"}},
+		{name: "packageName", message: "Enter go package name", storeTo: &cfg.PackageName, mandatory: true},
+		{name: "serverAddr", message: "Enter listen address", defaultValue: ":8080", storeTo: &cfg.ServerAddress},
+		{name: "dbhost", message: "Enter database host", defaultValue: "localhost", storeTo: &cfg.DbHost},
+		{name: "dbport", message: "Enter database port", defaultValue: "5432", storeTo: &cfg.DbPort},
+		{name: "dbname", message: "Enter database name", storeTo: &cfg.DbName},
+		{name: "dbuser", message: "Enter database user", storeTo: &cfg.DbUser},
+		{name: "dbpasswd", message: "Enter database password", defaultValue: "password", storeTo: &cfg.DbPassword},
+		{name: "redisport", message: "Enter redis port", defaultValue: "redis", storeTo: &cfg.RedisPort},
+		{name: "redisdb", message: "Enter redis host", defaultValue: "6379", storeTo: &cfg.RedisHost},
+		{name: "tokensecret", message: "Enter secret", storeTo: &cfg.TokenSecret},
+		{name: "debug", message: "Enable debug? (true || false)", defaultValue: "true", storeTo: &cfg.Debug,
 			acceptedValues: []string{"true", "false"}},
-		{message: "Do you need a scheduler? (true || false)", defaultValue: "true", storeTo: &cfg.UseScheduler},
+		{name: "needScheduler", message: "Do you need a scheduler? (true || false)", defaultValue: "true", storeTo: &cfg.UseScheduler},
 	}
 
 	for _, p := range params {
@@ -131,6 +139,23 @@ func readConfig() (appConfig, error) {
 		if err != nil {
 			return cfg, err
 		}
+		if p.mandatory && len(v) == 0 {
+			return cfg, fmt.Errorf("%s is mandatory", p.message)
+		}
+
+		for i := range p.updateDefault {
+			for j := range params {
+				if params[j].name == p.updateDefault[i] {
+					params[j].defaultValue = v
+				}
+			}
+		}
+
+		if strings.HasPrefix(cfg.AppName, "Enter app name") {
+			cfg.DbName = cfg.AppName
+			cfg.DbUser = cfg.AppName
+		}
+
 		if len(p.acceptedValues) > 0 {
 			isAccepted := false
 			for _, accepted := range p.acceptedValues {

@@ -21,7 +21,6 @@ type ServiceContainer struct {
 	DB       *sql.DB
 	Lock     *sync.RWMutex
 	Services map[string]interface{}
-	Payloads map[string]interface{}
 }
 
 func (o *ServiceContainer) GetService(name string) (interface{}, error) {
@@ -44,7 +43,6 @@ func NewDefault() (ans *ServiceContainer, err error) {
 	ans = &ServiceContainer{
 		Lock:     &sync.RWMutex{},
 		Services: make(map[string]interface{}),
-		Payloads: make(map[string]interface{}),
 	}
 	ans.Cfg, err = config.New("")
 	if err != nil {

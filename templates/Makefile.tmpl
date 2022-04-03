@@ -7,9 +7,26 @@ default: help
 help: ## help information about make commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' 
 
+## PostgreSQL
+
 .PHONY: db-start
 db-start: ## start the database
 	docker-compose up -d db
+
+.PHONY: db-login
+db-login: ## logins to database
+	docker exec -it todo_db_1 psql -U todo
+
+## Redis
+.PHONY: redis-start
+redis-start: ## starts redis
+	docker-compose up -d redis
+
+.PHONY: redis-login
+redis-login: ## logins to redis
+	docker exec -it todo_redis_1 redis-cli
+
+## Migrations
 
 .PHONY: migrate-up
 migrate-up: ## Runs the migrations up to the latest version
@@ -23,9 +40,12 @@ migrate-down: ## Reverts latest migration
 migrate-new: ## creates a new migrations
 	tern new $@ -m ./migrations
 
+## ORM models
 .PHONY: generate-models
 generate-models: ## generates models from db
 	go generate
+
+## Services
 
 .PHONY: run-api
 run-api: ## runs the API 
